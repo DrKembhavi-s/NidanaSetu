@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentDoctor } from "@/lib/doctor";
 import { logAuditEvent } from "@/lib/audit";
 
+const ALLOWED_MODULES = ["lab", "ecg", "imaging", "prescription"] as const;
+const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+const ALLOWED_MODALITIES = ["xray", "usg", "mri", "ct"];
+
 export async function POST(request: Request) {
   const doctor = await getCurrentDoctor();
   if (!doctor) {
@@ -11,6 +15,8 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const caseId = String(formData.get("case_id") ?? "");
+  const moduleType = String(formData.get("module_type") ?? "");
+  const modality = formData.get("modality");
   const file = formData.get("file");
 
   if (!caseId || !(file instanceof File)) {
@@ -19,13 +25,17 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-
-  const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-  if (!allowedTypes.includes(file.type)) {
+  if (!ALLOWED_MODULES.includes(moduleType as (typeof ALLOWED_MODULES)[number])) {
+    return NextResponse.json({ error: "Invalid module_type." }, { status: 400 });
+  }
+  if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json(
       { error: "Only PDF, JPEG, PNG, or WebP files are supported." },
       { status: 400 }
     );
+  }
+  if (moduleType === "imaging" && !ALLOWED_MODALITIES.includes(String(modality))) {
+    return NextResponse.json({ error: "A valid imaging modality is required." }, { status: 400 });
   }
 
   const supabase = await createClient();
@@ -45,9 +55,10 @@ export async function POST(request: Request) {
   const { error: insertError } = await supabase.from("reports").insert({
     id: reportId,
     case_id: caseId,
-    module_type: "lab",
+    module_type: moduleType,
     file_path: filePath,
     uploaded_by: doctor.id,
+    modality: moduleType === "imaging" ? String(modality) : null,
   });
 
   if (insertError) {
@@ -58,7 +69,7 @@ export async function POST(request: Request) {
     caseId,
     actorId: doctor.id,
     eventType: "report_uploaded",
-    eventDetail: { report_id: reportId, module_type: "lab" },
+    eventDetail: { report_id: reportId, module_type: moduleType },
   });
 
   return NextResponse.json({ report_id: reportId });

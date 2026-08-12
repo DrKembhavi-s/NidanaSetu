@@ -4,11 +4,7 @@ import { getCurrentDoctor } from "@/lib/doctor";
 import { logAuditEvent } from "@/lib/audit";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
 import { ReviewForm } from "./ReviewForm";
-
-type Draft = {
-  narrative: string;
-  lab_results: { test_name: string; value: string; unit?: string; flag: string }[];
-};
+import type { LabDraft, EcgDraft, ImagingDraft, PrescriptionsDraft } from "@/lib/interpretation-modules";
 
 export default async function InterpretationReviewPage({
   params,
@@ -21,7 +17,7 @@ export default async function InterpretationReviewPage({
   const { data: interpretation } = await supabase
     .from("interpretations")
     .select(
-      "id, status, ai_draft, doctor_final, signed_off_at, report_id, reports(case_id), signed_off_by, doctors!interpretations_signed_off_by_fkey(full_name)"
+      "id, status, ai_draft, doctor_final, signed_off_at, report_id, reports(case_id, module_type), signed_off_by, doctors!interpretations_signed_off_by_fkey(full_name)"
     )
     .eq("id", id)
     .single();
@@ -31,6 +27,7 @@ export default async function InterpretationReviewPage({
   const report = Array.isArray(interpretation.reports)
     ? interpretation.reports[0]
     : interpretation.reports;
+  const moduleType = (report?.module_type ?? "lab") as "lab" | "ecg" | "imaging" | "prescription";
 
   // Log every view of an AI-generated interpretation, per the disclaimer
   // audit requirement, before rendering the content below.
@@ -43,23 +40,28 @@ export default async function InterpretationReviewPage({
     });
   }
 
-  const draft = interpretation.ai_draft as Draft;
+  const draft = interpretation.ai_draft as
+    | LabDraft
+    | EcgDraft
+    | ImagingDraft
+    | PrescriptionsDraft;
   const signedOffDoctor = Array.isArray(interpretation.doctors)
     ? interpretation.doctors[0]
     : interpretation.doctors;
   const isSignedOff = interpretation.status === "signed_off";
-  const finalData = interpretation.doctor_final as Draft | null;
+  const finalData = interpretation.doctor_final as typeof draft | null;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Interpretation review</h1>
-      <DisclaimerBanner prominent />
+      <h1 className="text-xl font-semibold capitalize">{moduleType} interpretation review</h1>
+      <DisclaimerBanner prominent moduleType={moduleType} />
 
       <div className="space-y-2">
         <h2 className="font-medium">AI draft (as generated)</h2>
         <p className="text-sm whitespace-pre-wrap border rounded-md p-3 bg-slate-50">
           {draft.narrative}
         </p>
+        <StructuredDraft moduleType={moduleType} draft={draft} />
       </div>
 
       {isSignedOff ? (
@@ -76,12 +78,168 @@ export default async function InterpretationReviewPage({
           </p>
         </div>
       ) : (
-        <ReviewForm
-          interpretationId={id}
-          narrative={draft.narrative}
-          labResults={draft.lab_results ?? []}
-        />
+        <ReviewForm interpretationId={id} draft={draft} />
       )}
+    </div>
+  );
+}
+
+function StructuredDraft({
+  moduleType,
+  draft,
+}: {
+  moduleType: "lab" | "ecg" | "imaging" | "prescription";
+  draft: LabDraft | EcgDraft | ImagingDraft | PrescriptionsDraft;
+}) {
+  if (moduleType === "lab") {
+    const d = draft as LabDraft;
+    if (!d.lab_results?.length) return null;
+    return (
+      <table className="w-full text-sm border">
+        <thead>
+          <tr className="border-b bg-slate-50">
+            <th className="text-left p-2">Test</th>
+            <th className="text-left p-2">Value</th>
+            <th className="text-left p-2">Flag</th>
+          </tr>
+        </thead>
+        <tbody>
+          {d.lab_results.map((r, i) => (
+            <tr key={i} className="border-b">
+              <td className="p-2">{r.test_name}</td>
+              <td className="p-2">
+                {r.value} {r.unit ?? ""}
+              </td>
+              <td className={`p-2 ${r.flag === "normal" ? "text-slate-600" : "text-red-600 font-medium"}`}>
+                {r.flag}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  if (moduleType === "ecg") {
+    const d = draft as EcgDraft;
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm border rounded-md p-3">
+        <div>
+          <div className="text-slate-500">Rate</div>
+          <div>{d.rate_bpm != null ? `${d.rate_bpm} bpm` : "—"}</div>
+        </div>
+        <div>
+          <div className="text-slate-500">Rhythm</div>
+          <div>{d.rhythm || "—"}</div>
+        </div>
+        <div>
+          <div className="text-slate-500">Axis</div>
+          <div>{d.axis || "—"}</div>
+        </div>
+        <div>
+          <div className="text-slate-500">Intervals (ms)</div>
+          <div>
+            PR {d.intervals?.pr_ms ?? "—"} · QRS {d.intervals?.qrs_ms ?? "—"} · QT{" "}
+            {d.intervals?.qt_ms ?? "—"} · QTc {d.intervals?.qtc_ms ?? "—"}
+          </div>
+        </div>
+        {d.abnormalities?.length > 0 && (
+          <div className="col-span-full">
+            <div className="text-slate-500">Flagged abnormalities</div>
+            <ul className="list-disc pl-5">
+              {d.abnormalities.map((a, i) => (
+                <li key={i}>{a}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (moduleType === "imaging") {
+    const d = draft as ImagingDraft;
+    if (!d.observations?.length) return null;
+    return (
+      <div className="space-y-2">
+        <p className="text-xs uppercase tracking-wide text-red-700 font-semibold">
+          Observations to verify — not diagnostic conclusions
+        </p>
+        <ul className="border rounded-md divide-y">
+          {d.observations.map((o, i) => (
+            <li key={i} className="p-2 text-sm">
+              {o.finding}
+              {o.location ? <span className="text-slate-500"> ({o.location})</span> : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  // prescription
+  const d = draft as PrescriptionsDraft;
+  return (
+    <div className="space-y-4">
+      {d.medications?.length > 0 && (
+        <table className="w-full text-sm border">
+          <thead>
+            <tr className="border-b bg-slate-50">
+              <th className="text-left p-2">Drug</th>
+              <th className="text-left p-2">Dose</th>
+              <th className="text-left p-2">Indications</th>
+              <th className="text-left p-2">Side effects</th>
+              <th className="text-left p-2">Interaction flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.medications.map((m, i) => (
+              <tr key={i} className="border-b align-top">
+                <td className="p-2">
+                  {m.drug_name}
+                  {m.normalized_name && m.normalized_name !== m.drug_name ? (
+                    <div className="text-xs text-slate-500">({m.normalized_name})</div>
+                  ) : null}
+                </td>
+                <td className="p-2">{m.dose ?? "—"}</td>
+                <td className="p-2">{m.indications}</td>
+                <td className="p-2">{m.side_effects}</td>
+                <td className="p-2">
+                  {m.interaction_flags?.length > 0 ? (
+                    <ul className="list-disc pl-4 text-red-600">
+                      {m.interaction_flags.map((f, j) => (
+                        <li key={j}>{f}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    "none"
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div>
+        <h3 className="font-medium text-sm mb-1">
+          Symptom vs. side-effect cross-check
+        </h3>
+        {d.symptom_cross_check?.length > 0 ? (
+          <ul className="border rounded-md divide-y">
+            {d.symptom_cross_check.map((c, i) => (
+              <li key={i} className="p-2 text-sm">
+                <strong>{c.symptom}</strong> may be related to{" "}
+                <strong>{c.possibly_related_drug}</strong> — {c.rationale}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-slate-600">
+            No intake symptoms plausibly linked to current medication side effects.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

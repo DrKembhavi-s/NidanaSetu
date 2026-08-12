@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentDoctor } from "@/lib/doctor";
 import { logAuditEvent } from "@/lib/audit";
 import { getAnthropicClient, INTERPRETATION_MODEL } from "@/lib/anthropic/client";
+import { MODULE_REGISTRY } from "@/lib/interpretation-modules";
 
 const MEDIA_TYPES: Record<string, string> = {
   pdf: "application/pdf",
@@ -10,38 +11,6 @@ const MEDIA_TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
-};
-
-const LAB_INTERPRETATION_TOOL = {
-  name: "record_interpretation",
-  description:
-    "Record the structured lab report interpretation: extracted test values and a narrative summary tied to the patient's symptoms/history.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      narrative: {
-        type: "string",
-        description:
-          "A clinical narrative summary of the lab results, tied to the patient's presenting symptoms and history. Written for a physician to review, not the patient.",
-      },
-      lab_results: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            test_name: { type: "string" },
-            value: { type: "string" },
-            unit: { type: "string" },
-            reference_low: { type: ["number", "null"] },
-            reference_high: { type: ["number", "null"] },
-            flag: { type: "string", enum: ["low", "high", "normal"] },
-          },
-          required: ["test_name", "value", "flag"],
-        },
-      },
-    },
-    required: ["narrative", "lab_results"],
-  },
 };
 
 export async function POST(request: Request) {
@@ -60,16 +29,18 @@ export async function POST(request: Request) {
 
   const { data: report } = await supabase
     .from("reports")
-    .select("id, case_id, module_type, file_path")
+    .select("id, case_id, module_type, file_path, modality")
     .eq("id", reportId)
     .single();
 
   if (!report) {
     return NextResponse.json({ error: "Report not found." }, { status: 404 });
   }
-  if (report.module_type !== "lab") {
+
+  const moduleConfig = MODULE_REGISTRY[report.module_type];
+  if (!moduleConfig) {
     return NextResponse.json(
-      { error: "Only the lab reports module supports generation in this phase." },
+      { error: `No generation support for module "${report.module_type}".` },
       { status: 400 }
     );
   }
@@ -98,6 +69,24 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (existing) {
     return NextResponse.json({ interpretation_id: existing.id });
+  }
+
+  // Module-specific extra prompt context.
+  let extra: unknown = {};
+  if (report.module_type === "imaging") {
+    extra = { modality: report.modality ?? "unspecified" };
+  } else if (report.module_type === "prescription") {
+    const { data: priorMeds } = await supabase
+      .from("medications")
+      .select("drug_name, dose, prescription_report_id, reports!medications_prescription_report_id_fkey(case_id)")
+      .neq("prescription_report_id", reportId);
+    const sameCasePriorMeds = (priorMeds ?? []).filter((m) => {
+      const r = Array.isArray(m.reports) ? m.reports[0] : m.reports;
+      return r?.case_id === report.case_id;
+    });
+    extra = {
+      priorMedications: sameCasePriorMeds.map((m) => ({ drug_name: m.drug_name, dose: m.dose })),
+    };
   }
 
   const { data: fileBlob, error: downloadError } = await supabase.storage
@@ -142,28 +131,12 @@ export async function POST(request: Request) {
   const response = await anthropic.messages.create({
     model: INTERPRETATION_MODEL,
     max_tokens: 4096,
-    tools: [LAB_INTERPRETATION_TOOL],
+    tools: [moduleConfig.tool],
     tool_choice: { type: "tool", name: "record_interpretation" },
     messages: [
       {
         role: "user",
-        content: [
-          fileContentBlock,
-          {
-            type: "text",
-            text: [
-              "Read this lab report and extract every test value you can find, flagging any outside its reference range.",
-              "Patient context (from the doctor's intake for this case):",
-              `- Age: ${intake.age_at_visit}`,
-              `- Sex: ${intake.sex}`,
-              `- Presenting symptoms: ${intake.symptoms}`,
-              intake.history ? `- Relevant history: ${intake.history}` : "",
-              "Write the narrative for the reviewing physician, tying findings back to the presenting symptoms where relevant. This is a draft for physician review, not a final diagnosis.",
-            ]
-              .filter(Boolean)
-              .join("\n"),
-          },
-        ],
+        content: [fileContentBlock, { type: "text", text: moduleConfig.buildPromptText(intake, extra) }],
       },
     ],
   });
@@ -173,31 +146,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Model did not return structured output." }, { status: 502 });
   }
 
-  const aiDraft = toolUse.input as {
-    narrative: string;
-    lab_results: {
-      test_name: string;
-      value: string;
-      unit?: string;
-      reference_low?: number | null;
-      reference_high?: number | null;
-      flag: "low" | "high" | "normal";
-    }[];
-  };
+  const aiDraft = toolUse.input;
 
-  if (aiDraft.lab_results.length > 0) {
-    await supabase.from("lab_results").insert(
-      aiDraft.lab_results.map((r) => ({
-        report_id: reportId,
-        test_name: r.test_name,
-        value: r.value,
-        unit: r.unit ?? null,
-        reference_low: r.reference_low ?? null,
-        reference_high: r.reference_high ?? null,
-        flag: r.flag,
-      }))
-    );
-  }
+  await moduleConfig.afterGenerate(supabase, reportId, aiDraft);
 
   const { data: interpretation, error: insertError } = await supabase
     .from("interpretations")
@@ -222,7 +173,7 @@ export async function POST(request: Request) {
     caseId: report.case_id,
     actorId: doctor.id,
     eventType: "interpretation_generated",
-    eventDetail: { report_id: reportId, interpretation_id: interpretation.id },
+    eventDetail: { report_id: reportId, interpretation_id: interpretation.id, module_type: report.module_type },
   });
 
   return NextResponse.json({ interpretation_id: interpretation.id });

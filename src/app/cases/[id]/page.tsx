@@ -4,10 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { IntakeForm } from "./IntakeForm";
 
 const MODULES = [
-  { key: "lab", label: "Lab reports", ready: true },
-  { key: "ecg", label: "ECG", ready: false },
-  { key: "imaging", label: "Imaging", ready: false },
-  { key: "prescriptions", label: "Prescriptions", ready: false },
+  { routeSegment: "lab", label: "Lab reports" },
+  { routeSegment: "ecg", label: "ECG" },
+  { routeSegment: "imaging", label: "Imaging" },
+  { routeSegment: "prescriptions", label: "Prescriptions" },
 ] as const;
 
 export default async function CaseDetailPage({ params }: PageProps<"/cases/[id]">) {
@@ -49,25 +49,15 @@ export default async function CaseDetailPage({ params }: PageProps<"/cases/[id]"
       <div className="space-y-3">
         <h2 className="font-medium">Reports</h2>
         <div className="flex gap-2 flex-wrap">
-          {MODULES.map((m) =>
-            m.ready ? (
-              <Link
-                key={m.key}
-                href={`/cases/${id}/reports/lab/upload`}
-                className="text-sm border rounded-md px-3 py-2"
-              >
-                Upload {m.label}
-              </Link>
-            ) : (
-              <Link
-                key={m.key}
-                href={`/cases/${id}/reports/${m.key}`}
-                className="text-sm border rounded-md px-3 py-2 text-slate-400"
-              >
-                {m.label} (coming soon)
-              </Link>
-            )
-          )}
+          {MODULES.map((m) => (
+            <Link
+              key={m.routeSegment}
+              href={`/cases/${id}/reports/${m.routeSegment}/upload`}
+              className="text-sm border rounded-md px-3 py-2"
+            >
+              Upload {m.label}
+            </Link>
+          ))}
         </div>
 
         {!reports || reports.length === 0 ? (

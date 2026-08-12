@@ -3,24 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type LabResult = {
-  test_name: string;
-  value: string;
-  unit?: string;
-  flag: string;
-};
-
 export function ReviewForm({
   interpretationId,
-  narrative,
-  labResults,
+  draft,
 }: {
   interpretationId: string;
-  narrative: string;
-  labResults: LabResult[];
+  draft: { narrative: string; [key: string]: unknown };
 }) {
   const router = useRouter();
-  const [text, setText] = useState(narrative);
+  const [text, setText] = useState(draft.narrative);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +23,7 @@ export function ReviewForm({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        doctor_final: { narrative: text, lab_results: labResults },
+        doctor_final: { ...draft, narrative: text },
       }),
     });
     const body = await res.json();

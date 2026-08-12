@@ -9,7 +9,9 @@ export default async function ReportDetailPage({ params }: PageProps<"/reports/[
 
   const { data: report } = await supabase
     .from("reports")
-    .select("id, case_id, module_type, file_path, uploaded_at, cases(patient_id, patients(full_name))")
+    .select(
+      "id, case_id, module_type, modality, file_path, uploaded_at, cases(patient_id, patients(full_name))"
+    )
     .eq("id", id)
     .single();
 
@@ -38,14 +40,15 @@ export default async function ReportDetailPage({ params }: PageProps<"/reports/[
     .from("report-files")
     .createSignedUrl(report.file_path, 600);
 
-  const { data: currentResults } = await supabase
-    .from("lab_results")
-    .select("test_name, value, unit, flag")
-    .eq("report_id", id);
+  const isLab = report.module_type === "lab";
+
+  const { data: currentResults } = isLab
+    ? await supabase.from("lab_results").select("test_name, value, unit, flag").eq("report_id", id)
+    : { data: null };
 
   // Trend: previous lab reports for the same patient, most recent first.
   let trend: { test_name: string; value: string; uploaded_at: string }[] = [];
-  if (caseRow?.patient_id) {
+  if (isLab && caseRow?.patient_id) {
     const { data: priorReports } = await supabase
       .from("reports")
       .select("id, uploaded_at, case_id, cases(patient_id)")
@@ -83,8 +86,10 @@ export default async function ReportDetailPage({ params }: PageProps<"/reports/[
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">
-          Lab report — {patient?.full_name ?? "Unknown patient"}
+        <h1 className="text-xl font-semibold capitalize">
+          {report.module_type}
+          {report.modality ? ` (${report.modality.toUpperCase()})` : ""} —{" "}
+          {patient?.full_name ?? "Unknown patient"}
         </h1>
         <p className="text-sm text-slate-600">
           Uploaded {new Date(report.uploaded_at).toLocaleString()}
