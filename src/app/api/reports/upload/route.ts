@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentDoctor } from "@/lib/doctor";
 import { logAuditEvent } from "@/lib/audit";
 
-const ALLOWED_MODULES = ["lab", "ecg", "imaging", "prescription"] as const;
+const ALLOWED_MODULES = ["lab", "ecg", "imaging", "prescription", "dermatology"] as const;
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 const ALLOWED_MODALITIES = ["xray", "usg", "mri", "ct"];
 

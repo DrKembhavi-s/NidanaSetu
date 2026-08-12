@@ -5,7 +5,16 @@ import { logAuditEvent } from "@/lib/audit";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
 import { ReviewForm } from "./ReviewForm";
 import { PrintButton } from "./PrintButton";
-import type { LabDraft, EcgDraft, ImagingDraft, PrescriptionsDraft } from "@/lib/interpretation-modules";
+import type {
+  LabDraft,
+  EcgDraft,
+  ImagingDraft,
+  PrescriptionsDraft,
+  DermatologyDraft,
+} from "@/lib/interpretation-modules";
+
+type ModuleType = "lab" | "ecg" | "imaging" | "prescription" | "dermatology";
+type AnyDraft = LabDraft | EcgDraft | ImagingDraft | PrescriptionsDraft | DermatologyDraft;
 
 export default async function InterpretationReviewPage({
   params,
@@ -28,7 +37,7 @@ export default async function InterpretationReviewPage({
   const report = Array.isArray(interpretation.reports)
     ? interpretation.reports[0]
     : interpretation.reports;
-  const moduleType = (report?.module_type ?? "lab") as "lab" | "ecg" | "imaging" | "prescription";
+  const moduleType = (report?.module_type ?? "lab") as ModuleType;
 
   const caseRow = report ? (Array.isArray(report.cases) ? report.cases[0] : report.cases) : null;
   const patient = caseRow
@@ -53,11 +62,7 @@ export default async function InterpretationReviewPage({
     });
   }
 
-  const draft = interpretation.ai_draft as
-    | LabDraft
-    | EcgDraft
-    | ImagingDraft
-    | PrescriptionsDraft;
+  const draft = interpretation.ai_draft as AnyDraft;
   const signedOffDoctor = Array.isArray(interpretation.doctors)
     ? interpretation.doctors[0]
     : interpretation.doctors;
@@ -123,8 +128,8 @@ function StructuredDraft({
   moduleType,
   draft,
 }: {
-  moduleType: "lab" | "ecg" | "imaging" | "prescription";
-  draft: LabDraft | EcgDraft | ImagingDraft | PrescriptionsDraft;
+  moduleType: ModuleType;
+  draft: AnyDraft;
 }) {
   if (moduleType === "lab") {
     const d = draft as LabDraft;
@@ -208,6 +213,69 @@ function StructuredDraft({
             </li>
           ))}
         </ul>
+      </div>
+    );
+  }
+
+  if (moduleType === "dermatology") {
+    const d = draft as DermatologyDraft;
+    const riskStyles: Record<DermatologyDraft["risk_impression"], string> = {
+      likely_benign: "border-green-600 bg-green-50 text-green-900",
+      indeterminate: "border-amber-500 bg-amber-50 text-amber-900",
+      suspicious_features_present: "border-red-700 bg-red-100 text-red-950",
+    };
+    const riskLabels: Record<DermatologyDraft["risk_impression"], string> = {
+      likely_benign: "Likely benign",
+      indeterminate: "Indeterminate",
+      suspicious_features_present: "Suspicious features present",
+    };
+
+    return (
+      <div className="space-y-4">
+        <div
+          className={`border-2 rounded-md p-3 space-y-2 ${riskStyles[d.risk_impression]}`}
+        >
+          <p className="font-semibold text-sm uppercase tracking-wide">
+            Risk impression: {riskLabels[d.risk_impression]}
+          </p>
+          {d.suspicious_features?.length > 0 && (
+            <div>
+              <p className="text-xs font-medium">Features noted:</p>
+              <ul className="list-disc pl-5 text-sm">
+                {d.suspicious_features.map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="text-sm">
+            <span className="font-medium">Recommendation: </span>
+            {d.recommendation}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm border rounded-md p-3">
+          <div>
+            <div className="text-slate-500">Type</div>
+            <div>{d.lesion_description?.type || "—"}</div>
+          </div>
+          <div>
+            <div className="text-slate-500">Color</div>
+            <div>{d.lesion_description?.color || "—"}</div>
+          </div>
+          <div>
+            <div className="text-slate-500">Border</div>
+            <div>{d.lesion_description?.border || "—"}</div>
+          </div>
+          <div>
+            <div className="text-slate-500">Size (est.)</div>
+            <div>{d.lesion_description?.size_estimate || "—"}</div>
+          </div>
+          <div>
+            <div className="text-slate-500">Texture</div>
+            <div>{d.lesion_description?.texture || "—"}</div>
+          </div>
+        </div>
       </div>
     );
   }

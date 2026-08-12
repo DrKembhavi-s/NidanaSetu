@@ -3,14 +3,16 @@ export function DisclaimerBanner({
   moduleType,
 }: {
   prominent?: boolean;
-  moduleType?: "lab" | "ecg" | "imaging" | "prescription";
+  moduleType?: "lab" | "ecg" | "imaging" | "prescription" | "dermatology";
 }) {
   const isImaging = moduleType === "imaging";
+  const isDermatology = moduleType === "dermatology";
+  const isHighScrutiny = isImaging || isDermatology;
 
   return (
     <div
       className={
-        isImaging
+        isHighScrutiny
           ? "border-4 border-red-700 bg-red-100 text-red-950 rounded-md p-4 text-sm font-semibold"
           : prominent
             ? "border-2 border-red-600 bg-red-50 text-red-900 rounded-md p-4 text-sm font-medium"
@@ -28,9 +30,22 @@ export function DisclaimerBanner({
             Imaging findings below are unverified observations only, not a
             radiological diagnosis
           </strong>{" "}
-          — this is the highest-liability module in this tool. Every item
-          must be independently verified against the actual image before any
+          — this is a highest-liability module in this tool. Every item must
+          be independently verified against the actual image before any
           clinical decision is made.
+        </>
+      )}
+      {isDermatology && (
+        <>
+          {" "}
+          <strong>
+            The risk impression below is a triage suggestion only, not a
+            dermatological diagnosis
+          </strong>{" "}
+          — this is a highest-liability module in this tool. Do not rule out
+          or confirm any condition based on this alone; independently assess
+          the lesion and pursue confirmatory testing/referral if there is any
+          clinical concern, regardless of what is shown here.
         </>
       )}
     </div>

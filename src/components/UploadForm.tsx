@@ -16,7 +16,7 @@ export function UploadForm({
   showModality = false,
 }: {
   caseId: string;
-  moduleType: "lab" | "ecg" | "imaging" | "prescription";
+  moduleType: "lab" | "ecg" | "imaging" | "prescription" | "dermatology";
   showModality?: boolean;
 }) {
   const router = useRouter();

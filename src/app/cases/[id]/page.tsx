@@ -8,6 +8,7 @@ const MODULES = [
   { routeSegment: "ecg", label: "ECG" },
   { routeSegment: "imaging", label: "Imaging" },
   { routeSegment: "prescriptions", label: "Prescriptions" },
+  { routeSegment: "dermatology", label: "Dermatology (skin)" },
 ] as const;
 
 export default async function CaseDetailPage({ params }: PageProps<"/cases/[id]">) {

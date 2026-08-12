@@ -148,6 +148,20 @@ export async function POST(request: Request) {
 
   const aiDraft = toolUse.input;
 
+  // Forced tool_choice makes the model call the tool, but doesn't guarantee
+  // its input actually matches the schema shape — validate the one field
+  // every module's schema requires before persisting anything.
+  if (
+    typeof aiDraft !== "object" ||
+    aiDraft === null ||
+    typeof (aiDraft as { narrative?: unknown }).narrative !== "string"
+  ) {
+    return NextResponse.json(
+      { error: "Model returned malformed structured output. Try generating again." },
+      { status: 502 }
+    );
+  }
+
   await moduleConfig.afterGenerate(supabase, reportId, aiDraft);
 
   const { data: interpretation, error: insertError } = await supabase
