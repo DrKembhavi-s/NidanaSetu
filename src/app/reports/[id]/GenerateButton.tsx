@@ -40,7 +40,7 @@ export function GenerateButton({
         type="button"
         onClick={handleClick}
         disabled={!intakeCompleted || pending}
-        className="bg-slate-900 text-white rounded-md px-4 py-2 disabled:opacity-50"
+        className="bg-brand-700 hover:bg-brand-800 text-white rounded-md px-4 py-2 disabled:opacity-50"
       >
         {pending ? "Generating..." : "Generate interpretation"}
       </button>

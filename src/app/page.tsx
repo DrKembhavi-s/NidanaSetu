@@ -19,13 +19,13 @@ export default async function DashboardPage() {
         <div className="flex gap-3">
           <Link
             href="/patients/new"
-            className="text-sm border rounded-md px-3 py-2"
+            className="text-sm border border-brand-700 text-brand-700 rounded-md px-3 py-2 hover:bg-brand-50"
           >
             New patient
           </Link>
           <Link
             href="/cases/new"
-            className="text-sm bg-slate-900 text-white rounded-md px-3 py-2"
+            className="text-sm bg-brand-700 hover:bg-brand-800 text-white rounded-md px-3 py-2"
           >
             New case
           </Link>

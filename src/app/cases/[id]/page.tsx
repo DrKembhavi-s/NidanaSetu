@@ -53,7 +53,7 @@ export default async function CaseDetailPage({ params }: PageProps<"/cases/[id]"
             <Link
               key={m.routeSegment}
               href={`/cases/${id}/reports/${m.routeSegment}/upload`}
-              className="text-sm border rounded-md px-3 py-2"
+              className="text-sm border border-brand-700 text-brand-700 rounded-md px-3 py-2 hover:bg-brand-50"
             >
               Upload {m.label}
             </Link>

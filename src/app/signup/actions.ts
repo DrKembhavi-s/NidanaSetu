@@ -12,9 +12,13 @@ export async function signup(
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("full_name") ?? "").trim();
+  const clinicName = String(formData.get("clinic_name") ?? "").trim();
+  const speciality = String(formData.get("speciality") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
 
   if (!email || !password || !fullName) {
-    return { error: "All fields are required." };
+    return { error: "Name, email, and password are required." };
   }
 
   const admin = createAdminClient();
@@ -35,6 +39,10 @@ export async function signup(
     auth_user_id: created.user.id,
     full_name: fullName,
     email,
+    clinic_name: clinicName || null,
+    speciality: speciality || null,
+    address: address || null,
+    phone: phone || null,
   });
   if (doctorError) {
     return { error: doctorError.message };

@@ -21,7 +21,7 @@ export default async function NewCasePage({
       {!patients || patients.length === 0 ? (
         <p className="text-sm text-slate-600">
           No patients yet.{" "}
-          <Link href="/patients/new" className="underline">
+          <Link href="/patients/new" className="text-brand-700 underline">
             Create a patient first
           </Link>
           .

@@ -99,7 +99,7 @@ export default async function ReportDetailPage({ params }: PageProps<"/reports/[
             href={fileUrl.signedUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-sm underline"
+            className="text-sm text-brand-700 underline"
           >
             View uploaded file
           </a>
@@ -165,7 +165,7 @@ export default async function ReportDetailPage({ params }: PageProps<"/reports/[
       {interpretation ? (
         <Link
           href={`/interpretations/${interpretation.id}/review`}
-          className="inline-block bg-slate-900 text-white rounded-md px-4 py-2"
+          className="inline-block bg-brand-700 hover:bg-brand-800 text-white rounded-md px-4 py-2"
         >
           {interpretation.status === "signed_off"
             ? "View signed-off interpretation"

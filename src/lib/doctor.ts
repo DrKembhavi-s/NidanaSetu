@@ -5,6 +5,10 @@ export type Doctor = {
   auth_user_id: string;
   full_name: string;
   email: string;
+  clinic_name: string | null;
+  speciality: string | null;
+  address: string | null;
+  phone: string | null;
   created_at: string;
 };
 

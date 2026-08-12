@@ -4,6 +4,7 @@ import { getCurrentDoctor } from "@/lib/doctor";
 import { logAuditEvent } from "@/lib/audit";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
 import { ReviewForm } from "./ReviewForm";
+import { PrintButton } from "./PrintButton";
 import type { LabDraft, EcgDraft, ImagingDraft, PrescriptionsDraft } from "@/lib/interpretation-modules";
 
 export default async function InterpretationReviewPage({
@@ -17,7 +18,7 @@ export default async function InterpretationReviewPage({
   const { data: interpretation } = await supabase
     .from("interpretations")
     .select(
-      "id, status, ai_draft, doctor_final, signed_off_at, report_id, reports(case_id, module_type), signed_off_by, doctors!interpretations_signed_off_by_fkey(full_name)"
+      "id, status, ai_draft, doctor_final, signed_off_at, report_id, reports(case_id, module_type, cases(patients(full_name), intake_records(age_at_visit, sex))), signed_off_by, doctors!interpretations_signed_off_by_fkey(full_name)"
     )
     .eq("id", id)
     .single();
@@ -28,6 +29,18 @@ export default async function InterpretationReviewPage({
     ? interpretation.reports[0]
     : interpretation.reports;
   const moduleType = (report?.module_type ?? "lab") as "lab" | "ecg" | "imaging" | "prescription";
+
+  const caseRow = report ? (Array.isArray(report.cases) ? report.cases[0] : report.cases) : null;
+  const patient = caseRow
+    ? Array.isArray(caseRow.patients)
+      ? caseRow.patients[0]
+      : caseRow.patients
+    : null;
+  const intake = caseRow
+    ? Array.isArray(caseRow.intake_records)
+      ? caseRow.intake_records[0]
+      : caseRow.intake_records
+    : null;
 
   // Log every view of an AI-generated interpretation, per the disclaimer
   // audit requirement, before rendering the content below.
@@ -53,6 +66,26 @@ export default async function InterpretationReviewPage({
 
   return (
     <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="border-b-2 border-brand-700 pb-3 space-y-0.5">
+          <p className="font-semibold text-brand-800">
+            {doctor.clinic_name || "NidanaSetu"}
+          </p>
+          {doctor.speciality && <p className="text-sm text-slate-600">{doctor.speciality}</p>}
+          {doctor.address && <p className="text-sm text-slate-600">{doctor.address}</p>}
+          <p className="text-sm text-slate-600">
+            Dr. {doctor.full_name}
+            {doctor.phone ? ` · ${doctor.phone}` : ""}
+          </p>
+          <p className="text-sm text-slate-700 pt-1">
+            Patient: {patient?.full_name ?? "Unknown"}
+            {intake?.age_at_visit != null ? ` · Age ${intake.age_at_visit}` : ""}
+            {intake?.sex ? ` · ${intake.sex}` : ""}
+          </p>
+        </div>
+        <PrintButton />
+      </div>
+
       <h1 className="text-xl font-semibold capitalize">{moduleType} interpretation review</h1>
       <DisclaimerBanner prominent moduleType={moduleType} />
 
@@ -78,7 +111,9 @@ export default async function InterpretationReviewPage({
           </p>
         </div>
       ) : (
-        <ReviewForm interpretationId={id} draft={draft} />
+        <div className="print:hidden">
+          <ReviewForm interpretationId={id} draft={draft} />
+        </div>
       )}
     </div>
   );
